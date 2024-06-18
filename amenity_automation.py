@@ -9,6 +9,8 @@ from selenium.webdriver.common.action_chains import ActionChains
 from datetime import datetime
 import re
 import pandas as pd
+from send_message import send_telegram_message
+
 
 df = pd.read_csv('mydata.csv')
 
@@ -17,7 +19,13 @@ last_saved_date = list(df["Date"])[-1]
 # Initialize WebDriver (this example uses Chrome)
 service = Service(executable_path=r'/Users/akshay/Downloads/chromedriver-mac-x64-3/chromedriver')
 options = webdriver.ChromeOptions()
-options.page_load_strategy = 'normal'
+# options.page_load_strategy = 'normal'
+options.page_load_strategy = 'none'
+options.add_argument("--window-size=1920x1080")
+
+options.add_argument("--headless")
+options.add_argument('--no-sandbox')
+
 driver = webdriver.Chrome(service=service, options=options)
 
 driver.get("https://amenitypass.app/properties/kpq3hfxg595e962wda2acanff0/amenities/jvdthen1z106xdrsb36b2ptc4m")
@@ -25,7 +33,7 @@ driver.get("https://amenitypass.app/properties/kpq3hfxg595e962wda2acanff0/amenit
 
 scroll_script = """
 var element = arguments[0];
-var halfHeight = element.scrollHeight / 2;
+var halfHeight = element.scrollHeight;
 element.scrollTop = halfHeight;
 """
 
@@ -52,6 +60,7 @@ def is_within_range(start_time_str, end_time_str, range_start, range_end):
 
 # Wait until the element with class name "agenda" is present
 try:
+    telegram_message = "Pickleball Pass Booked\n"
     current_date, one_month_after_date = get_after_month_date()
     
     figure_element = WebDriverWait(driver, 20).until(
@@ -63,6 +72,9 @@ try:
     # element_height = article_element.size['height']
     # driver.execute_script("arguments[0].scrollIntoView();", article_element)
     driver.execute_script(scroll_script, article_element)
+    time.sleep(1)
+    driver.execute_script(scroll_script, article_element)
+    time.sleep(1)
     # time.sleep(5)
 
     ul_element = figure_element.find_element(By.CSS_SELECTOR, 'ul.dates')
@@ -92,6 +104,7 @@ try:
         link_of_element = all_link_elements[-1]
         # print(found_date, " -=-=-=- ", one_month_after_date)
         if found_date != last_saved_date:
+            telegram_message += "Date: " + found_date + "\n"
             print("DONE")
             print(found_date)
             # driver.execute_script(script, ul_element)
@@ -99,7 +112,7 @@ try:
             actions.move_to_element(ul_element).perform()
             # last_li_element = ul_element.find_elements(By.TAG_NAME, 'li')[-1]
             driver.execute_script(scroll_script, article_element)
-            time.sleep(3)
+            time.sleep(1)
             # last_li_element.click()
             link_element.click()
             time.sleep(2)
@@ -147,6 +160,7 @@ try:
             print(filtered_times)
             if filtered_times:
                 first_time_range = filtered_times[0]
+                telegram_message += f"Time: {first_time_range}\nApartment: {apartment}\nPasscode: {passcode}\nName: {name}\nPhone: {phone}"
                 filtered_time_start = first_time_range[0]
                 filtered_time_end  = first_time_range[1]
                 index_of_element = start_times.index(filtered_time_start)
@@ -199,14 +213,15 @@ try:
                 }
 
                 df.loc[len(df)] = add_data
-
-                time.sleep(10)
+                df.to_csv("mydata.csv")
+                send_telegram_message(telegram_message)
+                time.sleep(2)
 
             else:
                 print("No item found in given time range")
 
         else:
-            print("No Date Found")
+            print("Already Booked for this date")
         
     print("Element found")
 except Exception as e:
