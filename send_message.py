@@ -2,7 +2,6 @@ import telegram
 import asyncio
 
 # Bot find - t.me/AmenityAutoBot
-BOT_TOKEN = "7205271683:AAGgMHvoiCdd1HklOoE2cm0ruwJU22Oti1o"
 
 async def send_message(chat_id, message: str):
     """Sends a text message to the specified chat."""
