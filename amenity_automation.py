@@ -11,9 +11,12 @@ import re
 import pandas as pd
 from send_message import send_telegram_message
 
-# Read the CSV file and drop the "Unnamed" column if it exists
-df = pd.read_csv('mydata.csv').drop(columns=['Unnamed: 0'], errors='ignore')
+df = pd.read_csv('mydata.csv')
+
+# Remove unnamed columns
+df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
 print(df)
+
 last_saved_date = list(df["Date"])[-1]
 
 # Initialize WebDriver (this example uses Chrome)
@@ -34,10 +37,10 @@ var halfHeight = element.scrollHeight;
 element.scrollTop = halfHeight;
 """
 
-# Define the date range
-date_format = "%A %B %d"
-range_start_date = datetime.strptime("Monday July 01", date_format)
-range_end_date = datetime.strptime("Wednesday July 31", date_format)
+# All Input Fields
+
+range_start = datetime.strptime("8:00 AM", "%I:%M %p")
+range_end = datetime.strptime("2:00 PM", "%I:%M %p")
 
 apartment = "50-0404"
 passcode = "244628"
@@ -52,6 +55,13 @@ def is_within_range(start_time_str, end_time_str, range_start, range_end):
     start_time = datetime.strptime(start_time_str, "%I:%M %p")
     end_time = datetime.strptime(end_time_str, "%I:%M %p")
     return range_start <= start_time <= range_end and range_start <= end_time <= range_end
+
+# Define date range without considering the year
+start_date = datetime.strptime("July 01", "%B %d")
+end_date = datetime.strptime("July 30", "%B %d")
+
+# Define date format for parsing found_date
+date_format = "%A %B %d"
 
 # Wait until the element with class name "agenda" is present
 try:
@@ -86,16 +96,19 @@ try:
         except Exception as e:
             print(e)
             continue
+    print("DONE 1")
     
     if all_dates:
         found_date = all_dates[-1]
         link_of_element = all_link_elements[-1]
         
-        found_date_obj = datetime.strptime(found_date, date_format)
-        
-        if range_start_date <= found_date_obj <= range_end_date:
+        # Parse the found date and adjust the year to match the current year
+        found_date_obj = datetime.strptime(found_date, date_format).replace(year=datetime.now().year)
+        if start_date.replace(year=found_date_obj.year) <= found_date_obj <= end_date.replace(year=found_date_obj.year):
             if found_date != last_saved_date:
                 telegram_message += "Date: " + found_date + "\n"
+                print("DONE")
+                print(found_date)
                 actions = ActionChains(driver)
                 actions.move_to_element(ul_element).perform()
                 driver.execute_script(scroll_script, article_element)
@@ -125,26 +138,34 @@ try:
                     all_bottom_elements.append(bottom_element)
                     all_radio_button_elements.append(radio_element)
                 
+                print(all_upper_elements)
+                print("-----------")
+                print(all_bottom_elements)
+
                 start_times = []
                 end_times = []
+
                 for i in range(len(all_upper_elements)):
                     start_times.append(all_upper_elements[i].get_attribute("innerText"))
                     end_times.append(all_bottom_elements[i].get_attribute("innerText"))
+                    print(all_upper_elements[i].get_attribute("innerText"), " - ", all_bottom_elements[i].get_attribute("innerText"))
                 
                 cleaned_start_times = [extract_time(time) for time in start_times if extract_time(time)]
                 cleaned_end_times = [extract_time(time) for time in end_times if extract_time(time)]
                 filtered_times = [(start, end) for start, end in zip(cleaned_start_times, cleaned_end_times) if is_within_range(start, end, range_start, range_end)]
-                
+                print(filtered_times)
                 if filtered_times:
                     first_time_range = filtered_times[0]
                     telegram_message += f"Time: {first_time_range}\nApartment: {apartment}\nPasscode: {passcode}\nName: {name}\nPhone: {phone}"
                     filtered_time_start = first_time_range[0]
                     filtered_time_end  = first_time_range[1]
                     index_of_element = start_times.index(filtered_time_start)
+                    print("Index ------> ", index_of_element)
                     radio_button = all_radio_button_elements[index_of_element]
                     radio_button.click()
                     time.sleep(3)
                     footer_elements = driver.find_elements(By.TAG_NAME, "footer")
+                    print(len(footer_elements))
                     footer_element = footer_elements[1]
                     footer_button_element = footer_element.find_element(By.TAG_NAME, "a")
                     footer_button_element.click()
@@ -190,13 +211,17 @@ try:
                     df.loc[len(df)] = add_data
                     df.to_csv("mydata.csv", index=False)
                     send_telegram_message(telegram_message)
-                    time.sleep(2)
+                    time.sleep(10)
+
                 else:
                     print("No item found in given time range")
+
             else:
                 print("Already Booked for this date")
+        
         else:
             print("Date not in range")
+
     print("Element found")
 except Exception as e:
     print(e)
